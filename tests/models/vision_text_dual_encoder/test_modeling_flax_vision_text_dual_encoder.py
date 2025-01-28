@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VisionTextDualEncoder model. """
-
+"""Testing suite for the PyTorch VisionTextDualEncoder model."""
 
 import collections
 import tempfile
@@ -161,7 +160,7 @@ class VisionTextDualEncoderMixin:
 
         # prepare inputs
         flax_inputs = inputs_dict
-        pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
+        pt_inputs = {k: torch.tensor(v.tolist()).to(torch_device) for k, v in flax_inputs.items()}
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
@@ -169,7 +168,7 @@ class VisionTextDualEncoderMixin:
         fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-            self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+            self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 4e-2)
 
         # PT -> Flax
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -179,7 +178,7 @@ class VisionTextDualEncoderMixin:
         fx_outputs_loaded = fx_model_loaded(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
+            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(force=True), 4e-2)
 
         # Flax -> PT
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -194,7 +193,7 @@ class VisionTextDualEncoderMixin:
 
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output_loaded in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
-            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 4e-2)
+            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(force=True), 4e-2)
 
     def check_equivalence_pt_to_flax(self, vision_config, text_config, inputs_dict):
         config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_config, text_config)
@@ -366,7 +365,7 @@ class FlaxCLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase)
 class FlaxVisionTextDualEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model = FlaxVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1)
+        model = FlaxVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1.0)
         processor = VisionTextDualEncoderProcessor.from_pretrained("clip-italian/clip-italian")
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

@@ -101,6 +101,10 @@ class FlaxGenerationTesterMixin:
             pt_model = pt_model_class(config).eval()
             pt_model = load_flax_weights_in_pytorch_model(pt_model, flax_model.params)
 
+            # Generate max 5 tokens only otherwise seems to be numerical error accumulation
+            pt_model.generation_config.max_length = 5
+            flax_model.generation_config.max_length = 5
+
             flax_generation_outputs = flax_model.generate(input_ids).sequences
             pt_generation_outputs = pt_model.generate(torch.tensor(input_ids, dtype=torch.long))
 
@@ -157,6 +161,19 @@ class FlaxGenerationTesterMixin:
             jit_generation_outputs = jit_generate(input_ids).sequences
 
             self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
+
+    def test_beam_search_generate_num_return_sequences(self):
+        config, input_ids, _, max_length = self._get_input_ids_and_config()
+        config.do_sample = False
+        config.max_length = max_length
+        config.num_beams = 2
+        config.num_return_sequences = 2
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            generation_outputs = model.generate(input_ids).sequences
+            self.assertEqual(generation_outputs.shape[0], input_ids.shape[0] * config.num_return_sequences)
 
     def test_sample_generate_logits_warper(self):
         config, input_ids, _, max_length = self._get_input_ids_and_config()

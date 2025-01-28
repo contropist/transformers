@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ALIGN model. """
-
+"""Testing suite for the PyTorch ALIGN model."""
 
 import inspect
 import os
@@ -24,7 +23,6 @@ import requests
 
 from transformers import AlignConfig, AlignProcessor, AlignTextConfig, AlignVisionConfig
 from transformers.testing_utils import (
-    is_flax_available,
     require_torch,
     require_vision,
     slow,
@@ -40,6 +38,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -50,15 +49,10 @@ if is_torch_available():
         AlignTextModel,
         AlignVisionModel,
     )
-    from transformers.models.align.modeling_align import ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
-
-
-if is_flax_available():
-    pass
 
 
 class AlignVisionModelTester:
@@ -148,27 +142,26 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AlignVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AlignVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=AlignVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["num_channels", "image_size"],
         )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="AlignVisionModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="AlignVisionModel does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="AlignVisionModel does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_forward_signature(self):
@@ -217,17 +210,31 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class AlignTextModelTester:
@@ -241,7 +248,7 @@ class AlignTextModelTester:
         use_token_type_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -345,14 +352,32 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="ALIGN does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Align does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
@@ -365,9 +390,9 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class AlignModelTester:
@@ -380,6 +405,7 @@ class AlignModelTester:
         self.parent = parent
         self.text_model_tester = AlignTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = AlignVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -420,8 +446,9 @@ class AlignModelTester:
 
 
 @require_torch
-class AlignModelTest(ModelTesterMixin, unittest.TestCase):
+class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AlignModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": AlignModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -430,10 +457,23 @@ class AlignModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=AlignConfig,
+            has_text_modality=False,
+            common_properties=["projection_dim", "temperature_init_value"],
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="Start to fail after using torch `cu118`.")
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -443,12 +483,16 @@ class AlignModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Align does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @unittest.skip(reason="AlignModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override as the `temperature` parameter initilization is different for ALIGN
@@ -482,7 +526,7 @@ class AlignModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -532,6 +576,17 @@ class AlignModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
                 p2 = loaded_model_state_dict[layer_name]
@@ -557,9 +612,9 @@ class AlignModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlignModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kakaobrain/align-base"
+        model = AlignModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -580,7 +635,7 @@ class AlignModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         texts = ["a photo of a cat", "a photo of a dog"]
-        inputs = processor(text=texts, images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=texts, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -596,4 +651,4 @@ class AlignModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
         expected_logits = torch.tensor([[9.7093, 3.4679]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)

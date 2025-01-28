@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert OPT checkpoint."""
 
-
 import argparse
 from pathlib import Path
 
@@ -55,9 +54,9 @@ def load_checkpoint(checkpoint_path):
 
     keys = list(sd.keys())
     for key in keys:
-        if ".qkj_proj." in key:
+        if ".qkv_proj." in key:
             value = sd[key]
-            # We split QKV in seperate Q,K,V
+            # We split QKV in separate Q,K,V
 
             q_name = key.replace(".qkv_proj.", ".q_proj.")
             k_name = key.replace(".qkv_proj.", ".k_proj.")

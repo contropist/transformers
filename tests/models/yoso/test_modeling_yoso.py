@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch YOSO model. """
-
+"""Testing suite for the PyTorch YOSO model."""
 
 import unittest
 
@@ -36,7 +35,6 @@ if is_torch_available():
         YosoForTokenClassification,
         YosoModel,
     )
-    from transformers.models.yoso.modeling_yoso import YOSO_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class YosoModelTester:
@@ -51,7 +49,7 @@ class YosoModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -351,10 +349,11 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in YOSO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = YosoModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uw-madison/yoso-4096"
+        model = YosoModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
+    @unittest.skip(reason="This model does not output attentions")
     def test_attention_outputs(self):
         return
 
@@ -376,7 +375,7 @@ class YosoModelIntegrationTest(unittest.TestCase):
             [[[-0.0611, 0.1242, 0.0840], [0.0280, -0.0048, 0.1125], [0.0106, 0.0226, 0.0751]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_masked_lm(self):
@@ -395,7 +394,7 @@ class YosoModelIntegrationTest(unittest.TestCase):
             [[[-2.1313, -3.7285, -2.2407], [-2.7047, -3.3314, -2.6408], [0.0629, -2.5166, -0.3356]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_masked_lm_long_input(self):
@@ -414,4 +413,4 @@ class YosoModelIntegrationTest(unittest.TestCase):
             [[[-2.3914, -4.3742, -5.0956], [-4.0988, -4.2384, -7.0406], [-3.1427, -3.7192, -6.6800]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

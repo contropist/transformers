@@ -48,7 +48,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 @require_flax
@@ -241,7 +241,7 @@ class FlaxEncoderDecoderMixin:
 
         # prepare inputs
         flax_inputs = inputs_dict
-        pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
+        pt_inputs = {k: torch.tensor(v.tolist()).to(torch_device) for k, v in flax_inputs.items()}
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
@@ -249,7 +249,7 @@ class FlaxEncoderDecoderMixin:
         fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-            self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 1e-5)
 
         # PT -> Flax
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -259,7 +259,7 @@ class FlaxEncoderDecoderMixin:
         fx_outputs_loaded = fx_model_loaded(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(force=True), 1e-5)
 
         # Flax -> PT
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -274,7 +274,7 @@ class FlaxEncoderDecoderMixin:
 
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output_loaded in zip(fx_outputs, pt_outputs_loaded):
-            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(force=True), 1e-5)
 
     def check_equivalence_pt_to_flax(self, config, decoder_config, inputs_dict):
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
@@ -426,7 +426,7 @@ class FlaxViT2GPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.Test
 
     def get_pretrained_model(self):
         return FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "gpt2"
+            "google/vit-base-patch16-224-in21k", "openai-community/gpt2"
         )
 
 
@@ -434,7 +434,7 @@ class FlaxViT2GPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.Test
 class FlaxVisionEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
         return FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "gpt2"
+            "google/vit-base-patch16-224-in21k", "openai-community/gpt2"
         )
 
     def _check_configuration_tie(self, model):
@@ -462,12 +462,12 @@ class FlaxViT2GPT2ModelIntegrationTest(unittest.TestCase):
     def test_inference_coco_en(self):
         loc = "ydshieh/vit-gpt2-coco-en"
 
-        feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
+        image_processor = ViTImageProcessor.from_pretrained(loc)
         tokenizer = AutoTokenizer.from_pretrained(loc)
         model = FlaxVisionEncoderDecoderModel.from_pretrained(loc)
 
         img = prepare_img()
-        pixel_values = feature_extractor(images=img, return_tensors="np").pixel_values
+        pixel_values = image_processor(images=img, return_tensors="np").pixel_values
 
         decoder_input_ids = np.array([[model.config.decoder_start_token_id]])
         logits = model(pixel_values, decoder_input_ids)[0]

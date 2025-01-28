@@ -12,10 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MaskFormer Swin model. """
+"""Testing suite for the PyTorch MaskFormer Swin model."""
 
 import collections
-import inspect
 import unittest
 from typing import Dict, List, Tuple
 
@@ -23,6 +22,7 @@ from transformers import MaskFormerSwinConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
 from transformers.utils import is_torch_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -64,6 +64,7 @@ class MaskFormerSwinModelTester:
         type_sequence_label_size=10,
         encoder_stride=8,
         out_features=["stage1", "stage2", "stage3"],
+        out_indices=[1, 2, 3],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -90,6 +91,7 @@ class MaskFormerSwinModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -123,6 +125,7 @@ class MaskFormerSwinModelTester:
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -181,7 +184,13 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MaskFormerSwinConfig, embed_dim=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=MaskFormerSwinConfig,
+            has_text_modality=False,
+            embed_dim=37,
+            common_properties=["image_size", "patch_size", "num_channels"],
+        )
 
     @require_torch_multi_gpu
     @unittest.skip(
@@ -194,16 +203,7 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         pass
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -213,15 +213,15 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
-    @unittest.skip("Swin does not use inputs_embeds")
+    @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("Swin does not support feedforward chunking")
+    @unittest.skip(reason="Swin does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -229,18 +229,6 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @unittest.skip(reason="MaskFormerSwin is only used as backbone and doesn't support output_attentions")
     def test_attention_outputs(self):
@@ -395,3 +383,48 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+
+@require_torch
+class MaskFormerSwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (MaskFormerSwinBackbone,) if is_torch_available() else ()
+    config_class = MaskFormerSwinConfig
+
+    def setUp(self):
+        self.model_tester = MaskFormerSwinModelTester(self)
+
+    # Overriding as returned hidden states are tuples of tensors instead of a single tensor
+    def test_backbone_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size = inputs_dict["pixel_values"].shape[0]
+
+        for backbone_class in self.all_model_classes:
+            backbone = backbone_class(config)
+            backbone.to(torch_device)
+            backbone.eval()
+
+            outputs = backbone(**inputs_dict)
+
+            # Test default outputs and verify feature maps
+            self.assertIsInstance(outputs.feature_maps, tuple)
+            self.assertTrue(len(outputs.feature_maps) == len(backbone.channels))
+            for feature_map, n_channels in zip(outputs.feature_maps, backbone.channels):
+                self.assertTrue(feature_map.shape[:2], (batch_size, n_channels))
+            self.assertIsNone(outputs.hidden_states)
+            self.assertIsNone(outputs.attentions)
+
+            # Test output_hidden_states=True
+            outputs = backbone(**inputs_dict, output_hidden_states=True)
+            self.assertIsNotNone(outputs.hidden_states)
+            self.assertTrue(len(outputs.hidden_states), len(backbone.stage_names))
+            # We skip the stem layer
+            for hidden_states, n_channels in zip(outputs.hidden_states[1:], backbone.channels):
+                for hidden_state in hidden_states:
+                    # Hidden states are in the format (batch_size, (height * width), n_channels)
+                    h_batch_size, _, h_n_channels = hidden_state.shape
+                    self.assertTrue((h_batch_size, h_n_channels), (batch_size, n_channels))
+
+            # Test output_attentions=True
+            if self.has_attentions:
+                outputs = backbone(**inputs_dict, output_attentions=True)
+                self.assertIsNotNone(outputs.attentions)

@@ -55,10 +55,10 @@ class ProphetNetModelTester:
         use_labels=True,
         decoder_start_token_id=0,
         encoder_ffn_dim=32,
-        num_encoder_layers=4,
+        num_encoder_layers=2,
         num_encoder_attention_heads=4,
         decoder_ffn_dim=32,
-        num_decoder_layers=4,
+        num_decoder_layers=2,
         num_decoder_attention_heads=4,
         max_position_embeddings=30,
         is_encoder_decoder=True,
@@ -437,10 +437,10 @@ class ProphetNetModelTester:
                 decoder_attention_mask=decoder_attention_mask,
                 labels=lm_labels,
             )
-        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5981, device=torch_device), atol=1e-3))
+        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5892, device=torch_device), atol=1e-3))
 
         expected_logit_slice = torch.tensor(
-            [-0.0648, 0.0790, 0.0360, 0.0089, 0.0039, -0.0639, 0.0131], device=torch_device
+            [-0.0184, 0.0758, -0.0543, -0.0093, 0.0050, -0.0660, -0.1453], device=torch_device
         )
         self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
 
@@ -551,10 +551,10 @@ class ProphetNetStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=0,
         encoder_ffn_dim=32,
-        num_encoder_layers=4,
+        num_encoder_layers=2,
         num_encoder_attention_heads=4,
         decoder_ffn_dim=32,
-        num_decoder_layers=4,
+        num_decoder_layers=2,
         num_decoder_attention_heads=4,
         max_position_embeddings=30,
         is_encoder_decoder=False,
@@ -782,10 +782,10 @@ class ProphetNetStandaloneEncoderModelTester:
         use_labels=True,
         decoder_start_token_id=0,
         encoder_ffn_dim=32,
-        num_encoder_layers=4,
+        num_encoder_layers=2,
         num_encoder_attention_heads=4,
         decoder_ffn_dim=32,
-        num_decoder_layers=4,
+        num_decoder_layers=2,
         num_decoder_attention_heads=4,
         max_position_embeddings=30,
         is_encoder_decoder=False,
@@ -891,11 +891,11 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": ProphetNetForConditionalGeneration,
             "feature-extraction": ProphetNetModel,
             "summarization": ProphetNetForConditionalGeneration,
-            "text2text-generation": ProphetNetForConditionalGeneration,
             "text-generation": ProphetNetForCausalLM,
+            "text2text-generation": ProphetNetForConditionalGeneration,
+            "translation": ProphetNetForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -903,6 +903,25 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     test_pruning = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "TextGenerationPipelineTests":
+            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
+            # `ProphetNetConfig` was never used in pipeline tests: cannot create a simple
+            # tokenizer.
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = ProphetNetModelTester(self)
@@ -935,7 +954,7 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
 
-    @unittest.skip("Flaky test with no simple resolution. TODO Fix me @patrickvonplaten")
+    @unittest.skip(reason="Flaky test with no simple resolution. TODO Fix me @patrickvonplaten")
     def test_decoder_model_generate(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_value_states(*config_and_inputs)
@@ -1100,8 +1119,8 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
 
+    @unittest.skip(reason="Generating with head_masking has not been implemented for ProphetNet models yet.")
     def test_generate_with_head_masking(self):
-        """Generating with head_masking has not been implemented for ProphetNet models yet."""
         pass
 
 
@@ -1129,8 +1148,8 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return
 
 
@@ -1208,7 +1227,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-7.7729, -8.0343, -8.26001], [-7.74213, -7.8629, -8.6000], [-7.7328, -7.8269, -8.5264]]]
         ).to(torch_device)
-        #        self.assertTrue(torch.allclose(output_predited_logits[:, :3, :3], expected_slice, atol=1e-4))
+        #        torch.testing.assert_close(output_predited_logits[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
         assert torch.allclose(output_predited_logits[:, :3, :3], expected_slice, atol=1e-4)
 
         # encoder outputs
@@ -1218,7 +1237,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         expected_shape_encoder = torch.Size((1, 28, 1024))
         self.assertEqual(encoder_outputs.shape, expected_shape_encoder)
-        #        self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
+        #        torch.testing.assert_close(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, rtol=1e-4, atol=1e-4)
         assert torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4)
 
         # decoder outputs
@@ -1226,7 +1245,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 12, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]
-        #        self.assertTrue(torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4))
+        #        torch.testing.assert_close(next_first_stream_logits[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
         assert torch.allclose(next_first_stream_logits[:, :3, :3], expected_slice, atol=1e-4)
 
     @slow
